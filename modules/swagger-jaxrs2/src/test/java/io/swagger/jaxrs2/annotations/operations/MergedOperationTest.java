@@ -35,9 +35,9 @@ public class MergedOperationTest extends AbstractAnnotationTest {
 
     @Test(description = "shows how a method with parameters and no special annotations is processed")
     public void testAnnotatedParameters() {
-        String yaml = readIntoYaml(MethodWithParameters.class);
+        String generatedYaml = readIntoYaml(MethodWithParameters.class);
 
-        assertEquals(yaml,
+        assertEquals(generatedYaml,
                 "openapi: 3.0.0\n" +
                         "paths:\n" +
                         "  /findAll:\n" +
