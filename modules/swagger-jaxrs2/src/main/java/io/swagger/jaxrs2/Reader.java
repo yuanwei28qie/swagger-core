@@ -37,6 +37,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.ws.rs.Consumes;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
@@ -225,13 +226,13 @@ public class Reader implements OpenApiReader {
                         Type[] genericParameterTypes = method.getGenericParameterTypes();
                         for (int i = 0; i < genericParameterTypes.length; i++) {
                             final Type type = TypeFactory.defaultInstance().constructType(genericParameterTypes[i], cls);
-                            operationParameters.addAll(getParameters(type, Arrays.asList(paramAnnotations[i]), operation));
+                            operationParameters.addAll(getParameters(type, Arrays.asList(paramAnnotations[i]), operation, methodConsumes));
                         }
                     } else {
                         for (int i = 0; i < annotatedMethod.getParameterCount(); i++) {
                             AnnotatedParameter param = annotatedMethod.getParameter(i);
                             final Type type = TypeFactory.defaultInstance().constructType(param.getParameterType(), cls);
-                            List<Parameter> parameters = getParameters(type, Arrays.asList(paramAnnotations[i]), operation);
+                            List<Parameter> parameters = getParameters(type, Arrays.asList(paramAnnotations[i]), operation, methodConsumes);
                             for (Parameter parameter : parameters) {
                                 Schema parameterSchema = parameter.getSchema();
                                 if (StringUtils.isNotBlank(parameter.getIn())) {
@@ -352,6 +353,7 @@ public class Reader implements OpenApiReader {
         // handle return type, add as response in case.
         Type returnType = method.getGenericReturnType();
         if (!shouldIgnoreClass(returnType.getTypeName())) {
+            //returnType.g
             // TODO #2312 also add content to existing responses (from annotation) if it is not specified in annotation
             Map<String, Schema> schemaMap = ModelConverters.getInstance().read(returnType);
             if (schemaMap != null && !schemaMap.values().isEmpty()) {
@@ -504,7 +506,7 @@ public class Reader implements OpenApiReader {
         return false;
     }
 
-    private List<Parameter> getParameters(Type type, List<Annotation> annotations, Operation operation) {
+    private List<Parameter> getParameters(Type type, List<Annotation> annotations, Operation operation, Consumes methodConsumes) {
         final Iterator<OpenAPIExtension> chain = OpenAPIExtensions.chain();
         if (!chain.hasNext()) {
             return Collections.emptyList();
@@ -545,15 +547,17 @@ public class Reader implements OpenApiReader {
                             Schema schemaObject = new Schema();
                             MediaType mediaType = new MediaType();
                             Map<String, Schema> schemaMap = ModelConverters.getInstance().read(type);
-                            if(!schemaMap.isEmpty()){
+                            if (!schemaMap.isEmpty()) {
                                 schemaObject.set$ref(OperationParser.COMPONENTS_REF + ((SimpleType) type).getRawClass().getSimpleName());
                                 schemaMap.forEach((key, schema) -> {
-                                    OperationParser.applyProduces(classProduces, methodProduces, content, mediaType);
+                                    OperationParser.applyTypes(classConsumes == null ? new String[0] : classConsumes.value(),
+                                            methodConsumes == null ? new String[0] : methodConsumes.value(), content, mediaType);
                                     components.addSchemas(key, schema);
                                 });
                             } else {
                                 schemaObject.setType(((SimpleType) type).getRawClass().getName());
-                                OperationParser.applyProduces(classProduces, methodProduces, content, mediaType);
+                                OperationParser.applyTypes(classConsumes == null ? new String[0] : classConsumes.value(),
+                                        methodConsumes == null ? new String[0] : methodConsumes.value(), content, mediaType);
                             }
                             mediaType.setSchema(schemaObject);
                             requestBody.setContent(content);

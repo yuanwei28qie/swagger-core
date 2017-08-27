@@ -3,6 +3,7 @@ package io.swagger.jaxrs2;
 import io.swagger.converter.ModelConverters;
 import io.swagger.jaxrs2.util.ReaderUtils;
 import io.swagger.oas.annotations.enums.Explode;
+import io.swagger.oas.annotations.links.LinkParameter;
 import io.swagger.oas.annotations.media.ExampleObject;
 import io.swagger.oas.models.Components;
 import io.swagger.oas.models.ExternalDocumentation;
@@ -136,8 +137,8 @@ public class OperationParser {
             schemaObject.setType(schema.type());
             isEmpty = false;
         }
-        if (StringUtils.isNotBlank(schema._default())) {
-            schemaObject.setDefault(schema._default());
+        if (StringUtils.isNotBlank(schema.defaultValue())) {
+            schemaObject.setDefault(schema.defaultValue());
             isEmpty = false;
         }
         if (StringUtils.isNotBlank(schema.example())) {
@@ -183,7 +184,7 @@ public class OperationParser {
             isEmpty = false;
         }
 
-        ReaderUtils.getStringListFromStringArray(schema._enum()).ifPresent(schemaObject::setEnum);
+        ReaderUtils.getStringListFromStringArray(schema.allowableValues()).ifPresent(schemaObject::setEnum);
         getExternalDocumentation(schema.externalDocs()).ifPresent(schemaObject::setExternalDocs);
 
         if (isEmpty) {
@@ -289,7 +290,8 @@ public class OperationParser {
             if (StringUtils.isNotBlank(response.description())) {
                 apiResponseObject.setDescription(response.description());
             }
-            getContent(response.content(), classProduces, methodProduces, components).ifPresent(apiResponseObject::content);
+            getContent(response.content(), classProduces == null ? new String[0] : classProduces.value(),
+                    methodProduces == null ? new String[0] : methodProduces.value(), components).ifPresent(apiResponseObject::content);
             if (StringUtils.isNotBlank(apiResponseObject.getDescription()) || apiResponseObject.getContent() != null) {
 
                 Map<String, Link> links = getLinks(response.links());
@@ -352,26 +354,29 @@ public class OperationParser {
         return Optional.of(contentObject);
     }
 
-    public static Optional<Content> getContent(io.swagger.oas.annotations.media.Content annotationContent, Produces classProduces, Produces methodProduces, Components components) {
-        if (annotationContent == null) {
+    public static Optional<Content> getContent(io.swagger.oas.annotations.media.Content[] annotationContents, String[] classTypes, String[] methodTypes, Components components) {
+        if (annotationContents == null) {
             return Optional.empty();
         }
 
+        //Encapsulating Content model
         Content content = new Content();
-        MediaType mediaType = new MediaType();
 
-        getSchema(annotationContent, components).ifPresent(mediaType::setSchema);
+        for (io.swagger.oas.annotations.media.Content annotationContent : annotationContents) {
+            MediaType mediaType = new MediaType();
+            getSchema(annotationContent, components).ifPresent(mediaType::setSchema);
 
-        if (StringUtils.isNotBlank(annotationContent.mediaType())) {
-            content.addMediaType(annotationContent.mediaType(), mediaType);
-        } else {
-            if (mediaType.getSchema() != null) {
-                applyProduces(classProduces, methodProduces, content, mediaType);
+            if (StringUtils.isNotBlank(annotationContent.mediaType())) {
+                content.addMediaType(annotationContent.mediaType(), mediaType);
+            } else {
+                if (mediaType.getSchema() != null) {
+                    applyTypes(classTypes, methodTypes, content, mediaType);
+                }
             }
-        }
-        ExampleObject[] examples = annotationContent.examples();
-        for (ExampleObject example : examples) {
-            getMediaType(mediaType, example).ifPresent(mediaTypeObject -> content.addMediaType(annotationContent.mediaType(), mediaTypeObject));
+            ExampleObject[] examples = annotationContent.examples();
+            for (ExampleObject example : examples) {
+                getMediaType(mediaType, example).ifPresent(mediaTypeObject -> content.addMediaType(annotationContent.mediaType(), mediaTypeObject));
+            }
         }
         if (content.size() == 0) {
             return Optional.empty();
@@ -379,13 +384,13 @@ public class OperationParser {
         return Optional.of(content);
     }
 
-    public static void applyProduces(Produces classProduces, Produces methodProduces, Content content, MediaType mediaType) {
-        if (methodProduces != null) {
-            for (String value : methodProduces.value()) {
+    public static void applyTypes(String[] classTypes, String[] methodTypes, Content content, MediaType mediaType) {
+        if (methodTypes.length > 0) {
+            for (String value : methodTypes) {
                 content.addMediaType(value, mediaType);
             }
-        } else if (classProduces != null) {
-            for (String value : classProduces.value()) {
+        } else if (classTypes.length > 0) {
+            for (String value : classTypes) {
                 content.addMediaType(value, mediaType);
             }
         } else {
@@ -562,14 +567,16 @@ public class OperationParser {
         return Optional.of(linkObject);
     }
 
-    public static Map<String, String> getLinkParameters(io.swagger.oas.annotations.links.LinkParameters
-                                                                linkParameters) {
+    public static Map<String, String> getLinkParameters(LinkParameter[]
+                                                                linkParameter) {
         Map<String, String> linkParametersMap = new HashMap<>();
-        if (linkParameters == null) {
+        if (linkParameter == null) {
             return linkParametersMap;
         }
-        if (StringUtils.isNotBlank(linkParameters.name())) {
-            linkParametersMap.put(linkParameters.name(), linkParameters.expression());
+        for (LinkParameter parameter : linkParameter) {
+            if (StringUtils.isNotBlank(parameter.name())) {
+                linkParametersMap.put(parameter.name(), parameter.expression());
+            }
         }
 
         return linkParametersMap;
