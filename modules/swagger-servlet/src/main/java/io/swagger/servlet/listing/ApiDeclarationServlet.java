@@ -46,7 +46,7 @@ public class ApiDeclarationServlet extends HttpServlet {
     }
 
     @Override
-    public void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+    public void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException {
         final Swagger swagger = (Swagger) getServletContext().getAttribute("swagger");
         if (swagger == null) {
             response.setStatus(404);
