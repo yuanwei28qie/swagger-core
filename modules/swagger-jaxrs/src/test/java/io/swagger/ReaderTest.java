@@ -1,9 +1,7 @@
 package io.swagger;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.swagger.converter.ModelConverter;
-import io.swagger.converter.ModelConverterContextImpl;
-import io.swagger.jackson.ModelResolver;
+import com.fasterxml.jackson.module.jaxb.JaxbAnnotationModule;
+import io.swagger.converter.ModelConverters;
 import io.swagger.jaxrs.Reader;
 import io.swagger.models.ExternalDocs;
 import io.swagger.models.Model;
@@ -16,7 +14,6 @@ import io.swagger.models.parameters.HeaderParameter;
 import io.swagger.models.parameters.Parameter;
 import io.swagger.models.parameters.PathParameter;
 import io.swagger.models.parameters.QueryParameter;
-import io.swagger.models.properties.Property;
 import io.swagger.resources.AnnotatedInterfaceImpl;
 import io.swagger.resources.ApiConsumesProducesResource;
 import io.swagger.resources.ApiMultipleConsumesProducesResource;
@@ -43,6 +40,7 @@ import io.swagger.resources.ResourceWithValidation;
 import io.swagger.resources.RsConsumesProducesResource;
 import io.swagger.resources.RsMultipleConsumesProducesResource;
 import io.swagger.resources.SimpleMethods;
+import io.swagger.util.Json;
 import org.testng.annotations.Test;
 
 import javax.ws.rs.DELETE;
@@ -458,24 +456,50 @@ public class ReaderTest {
     }
 
     @Test(description = "Resolve Model with XML Properties starting with is prefix per #2635")
-    public void testModelResolverXMLPropertiesName() {
-        final ModelConverter mr = modelResolver();
-        final Model model = mr.resolve(MyClass.class, new ModelConverterContextImpl(mr), null);
-        final Map properties = model.getProperties();
+    public void testModelResolverXMLPropertiesName() throws Exception{
 
-        final Property isotonicDrink = (Property) properties.get("isotonicDrink");
-        assertNotNull(isotonicDrink);
-        assertEquals("isotonicDrink", isotonicDrink.getName());
-        assertEquals("beerDrink", isotonicDrink.getXml().getName());
+        MyClass myClass = new MyClass();
+        myClass.populate("isotonicDrink value", "softDrink value");
 
-        final Property softDrink = (Property) properties.get("softDrink");
-        assertNotNull(softDrink);
-        assertEquals("softDrink", softDrink.getName());
-        assertEquals("sugarDrink", softDrink.getXml().getName());
-    }
+        // reproduce issue #2635
+        Json.mapper().registerModule(new JaxbAnnotationModule());
+        Map<String, Model> schemas = ModelConverters.getInstance().read(MyClass.class);
+        assertNull(schemas.get("MyClass").getProperties().get("isotonicDrink")); // this fails, while it should pass
+        assertNotNull(schemas.get("MyClass").getProperties().get("beerDrink")); // this fails, while it should pass
 
-    private ModelResolver modelResolver() {
-        return new ModelResolver(new ObjectMapper());
+        // TODO
+        /*
+            1. also update test for 2.0 branch
+            2. at least support renaming in these cases via JsonProperty, by adding the following to line 336 in model resolver
+                JsonProperty jsonPropertyAnn = propDef.getPrimaryMember().getAnnotation(JsonProperty.class);
+                if (jsonPropertyAnn == null || !jsonPropertyAnn.value().equals(propName)) {
+                    ...
+                }
+            3. add tests for all cases (with and without JsonProperty, ApiModelProperty etc)
+            4. Repeat points 2,3 for 2.0 branch
+            5. see also and add a test for other issue mentioned in #2635
+            6. spend limited effort to see if we can modify logic in resolver somehow to handle differently
+                (maybe check also jackson options, etc), but consider ModelConvertTest.maintainPropertyNames
+            7a. if not solvable, push PR for master and 2.0 and tell to use JsonProperty or ApiModelProperty or equivalent @Schema in 2.0
+            7b. if solvable, push changes and tests
+
+
+            some related tickets and stuff:
+                  https://github.com/swagger-api/swagger-core/issues/415
+                  https://github.com/swagger-api/swagger-core/issues/2332
+                  https://github.com/swagger-api/swagger-core/issues/2635
+
+                  Tickets JAxb:
+                  https://github.com/swagger-api/swagger-core/issues/960
+
+                  Commits:
+                  https://github.com/swagger-api/swagger-core/commit/d183d8cd0f735fc18f5a50dcd52e2076da69b5df
+                  https://github.com/swagger-api/swagger-core/commit/0706c16eb8eaa8b348df895269affe73575e9578
+
+                  Jackson:
+                  https://stackoverflow.com/questions/32270422/jackson-renames-primitive-boolean-field-by-removing-is/35088196
+                  https://github.com/FasterXML/jackson-module-kotlin/issues/80
+         */
     }
 
     private Swagger getSwagger(Class<?> cls) {
